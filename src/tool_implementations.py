@@ -1904,6 +1904,22 @@ async def do_manage_clients(content: str, owner: Optional[str] = None) -> Dict:
         if action == "complete_ritual":
             return _cl.complete_ritual(user, args.get("ritual_id"),
                                        acknowledged=bool(args.get("acknowledged"))) or {"error": "Ritual not found"}
+        if action == "add_transcript":
+            return _cl.add_transcript(user, args.get("client_id"), content=args.get("content"),
+                                      title=args.get("title"), source=args.get("source", "notion"),
+                                      external_ref=args.get("external_ref"),
+                                      stakeholder_id=args.get("stakeholder_id"),
+                                      captured_at=_dtp(args.get("captured_at"))) \
+                or {"error": "Client or stakeholder not found"}
+        if action == "list_transcripts":
+            rows = _cl.list_transcripts(user, args.get("client_id"))
+            return {"transcripts": rows} if rows is not None else {"error": "Client not found"}
+        if action == "get_transcript":
+            return _cl.get_transcript(user, args.get("transcript_id")) or {"error": "Transcript not found"}
+        if action == "delete_transcript":
+            return {"ok": _cl.delete_transcript(user, args.get("transcript_id"))}
+        if action in ("synthesis_context", "build_synthesis_context"):
+            return _cl.build_synthesis_context(user, args.get("transcript_id")) or {"error": "Transcript not found"}
         return {"error": f"Unknown action: {action!r}"}
     except ValueError as e:
         return {"error": str(e), "exit_code": 1}

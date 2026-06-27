@@ -496,7 +496,9 @@ FUNCTION_TOOL_SCHEMAS = [
                                "enum": ["portfolio", "list_clients", "create_client", "get_client",
                                         "update_client", "delete_client", "add_stakeholder",
                                         "list_stakeholders", "upsert_itm", "get_itm", "add_tri",
-                                        "list_tri", "recommend_frames", "add_ritual", "complete_ritual"],
+                                        "list_tri", "recommend_frames", "add_ritual", "complete_ritual",
+                                        "add_transcript", "list_transcripts", "get_transcript",
+                                        "delete_transcript", "synthesis_context"],
                                "description": "The operation to perform."},
                     "client_id": {"type": "string", "description": "Client id (for client/stakeholder ops)."},
                     "stakeholder_id": {"type": "string", "description": "Stakeholder id (for ITM/TRI/ritual/frame ops)."},
@@ -531,7 +533,13 @@ FUNCTION_TOOL_SCHEMAS = [
                     "scores": {"type": "object", "description": "TRI per-item scores, e.g. {\"1\": {\"score\": 2, \"note\": \"...\"}}."},
                     "scheduled_at": {"type": "string", "description": "Ritual scheduled time (ISO datetime)."},
                     "note": {"type": "string", "description": "Ritual note."},
-                    "acknowledged": {"type": "boolean", "description": "complete_ritual: stakeholder acknowledged the ritual."}
+                    "acknowledged": {"type": "boolean", "description": "complete_ritual: stakeholder acknowledged the ritual."},
+                    "transcript_id": {"type": "string", "description": "Meeting transcript id (get/delete/synthesis_context)."},
+                    "content": {"type": "string", "description": "Transcript text (add_transcript)."},
+                    "title": {"type": "string", "description": "Transcript title (add_transcript)."},
+                    "source": {"type": "string", "description": "Transcript source: notion / granola / otter / manual."},
+                    "external_ref": {"type": "string", "description": "Notion page id/url or notetaker id for the transcript."},
+                    "captured_at": {"type": "string", "description": "When the meeting occurred (ISO datetime)."}
                 },
                 "required": ["action"]
             }

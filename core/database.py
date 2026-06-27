@@ -2002,6 +2002,25 @@ class BridgingRitual(TimestampMixin, Base):
     stakeholder = relationship("ClientStakeholder", backref=backref("bridging_rituals", cascade="all, delete-orphan"))
 
 
+class MeetingTranscript(TimestampMixin, Base):
+    """A meeting transcript attached to a client engagement (ingested from Notion,
+    a notetaker, or pasted manually) — the raw input to methodology synthesis
+    (Buildout Phase 03/04). FK to client cascades; stakeholder link is optional."""
+    __tablename__ = "meeting_transcripts"
+
+    id = Column(String, primary_key=True, index=True)
+    client_id = Column(String, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    stakeholder_id = Column(String, ForeignKey("client_stakeholders.id", ondelete="SET NULL"), nullable=True, index=True)
+    title = Column(String, nullable=True)
+    source = Column(String, nullable=True, default="notion")   # notion / granola / otter / manual
+    external_ref = Column(String, nullable=True)               # Notion page id/url or notetaker id
+    content = Column(Text, nullable=True)
+    captured_at = Column(DateTime, nullable=True)
+    owner = Column(String, nullable=True, index=True)
+
+    client = relationship("Client", backref=backref("transcripts", cascade="all, delete-orphan"))
+
+
 # Initialize the database by creating all tables
 
 

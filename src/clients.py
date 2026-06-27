@@ -23,6 +23,7 @@ from core.database import (
     ITMRecord,
     TRIScorecard,
     BridgingRitual,
+    MeetingTranscript,
 )
 from src import methodology
 
@@ -285,6 +286,103 @@ def complete_ritual(user: str, ritual_id: str, acknowledged: bool = False) -> Op
         r.acknowledged = acknowledged
         db.flush()
         return _ritual_dict(r)
+
+
+def get_stakeholder(user: str, stakeholder_id: str) -> Optional[dict]:
+    with get_db_session() as db:
+        s = _owned_stakeholder(db, user, stakeholder_id)
+        return _stakeholder_dict(s) if s else None
+
+
+# --------------------------------------------------------------------------- #
+# Meeting transcripts (Phase 03/04 — raw input to synthesis)
+# --------------------------------------------------------------------------- #
+def _transcript_dict(t: MeetingTranscript) -> dict:
+    return {
+        "id": t.id, "client_id": t.client_id, "stakeholder_id": t.stakeholder_id,
+        "title": t.title, "source": t.source, "external_ref": t.external_ref,
+        "content": t.content,
+        "captured_at": t.captured_at.isoformat() if t.captured_at else None,
+        "owner": t.owner,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+
+def add_transcript(user: str, client_id: str, content: Optional[str] = None,
+                   title: Optional[str] = None, source: str = "notion",
+                   external_ref: Optional[str] = None, stakeholder_id: Optional[str] = None,
+                   captured_at: Optional[datetime] = None) -> Optional[dict]:
+    with get_db_session() as db:
+        if not _owned_client(db, user, client_id):
+            return None
+        if stakeholder_id:
+            s = _owned_stakeholder(db, user, stakeholder_id)
+            if not s or s.client_id != client_id:
+                return None  # stakeholder must belong to this client
+        t = MeetingTranscript(id=_new_id(), client_id=client_id, stakeholder_id=stakeholder_id,
+                              title=title, source=source, external_ref=external_ref,
+                              content=content, captured_at=captured_at, owner=(user or None))
+        db.add(t)
+        db.flush()
+        return _transcript_dict(t)
+
+
+def list_transcripts(user: str, client_id: str) -> Optional[list[dict]]:
+    with get_db_session() as db:
+        if not _owned_client(db, user, client_id):
+            return None
+        q = (db.query(MeetingTranscript)
+             .filter(MeetingTranscript.client_id == client_id)
+             .order_by(MeetingTranscript.created_at.desc()))
+        return [_transcript_dict(t) for t in q.all()]
+
+
+def _owned_transcript(db, user: str, transcript_id: str) -> Optional[MeetingTranscript]:
+    return _scoped(db.query(MeetingTranscript).filter(MeetingTranscript.id == transcript_id),
+                   MeetingTranscript, user).first()
+
+
+def get_transcript(user: str, transcript_id: str) -> Optional[dict]:
+    with get_db_session() as db:
+        t = _owned_transcript(db, user, transcript_id)
+        return _transcript_dict(t) if t else None
+
+
+def delete_transcript(user: str, transcript_id: str) -> bool:
+    with get_db_session() as db:
+        t = _owned_transcript(db, user, transcript_id)
+        if not t:
+            return False
+        db.delete(t)
+        return True
+
+
+def build_synthesis_context(user: str, transcript_id: str) -> Optional[dict]:
+    """Assemble everything the methodology-synthesis LLM step needs from a transcript:
+    the transcript, its client, the linked stakeholder + ITM, the recommended comms
+    frames (archetype x stage), and the methodology guardrails. Deterministic — the
+    LLM call itself is a later step. None if the transcript isn't owned/found."""
+    t = get_transcript(user, transcript_id)
+    if not t:
+        return None
+    stakeholder = itm = None
+    frames = []
+    if t.get("stakeholder_id"):
+        stakeholder = get_stakeholder(user, t["stakeholder_id"])
+        itm = get_itm(user, t["stakeholder_id"])
+        rec = recommend_frames(user, t["stakeholder_id"])
+        frames = rec["frames"] if rec else []
+    return {
+        "transcript": t,
+        "client": get_client(user, t["client_id"]),
+        "stakeholder": stakeholder,
+        "itm": itm,
+        "recommended_frames": frames,
+        "methodology": {
+            "itm_dimensions": list(methodology.ITM_DIMENSIONS),
+            "avoid_frames": list(methodology.AVOID_FRAMES),
+        },
+    }
 
 
 # --------------------------------------------------------------------------- #

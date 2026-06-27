@@ -83,6 +83,15 @@ class RitualComplete(BaseModel):
     acknowledged: bool = False
 
 
+class TranscriptCreate(BaseModel):
+    content: Optional[str] = None
+    title: Optional[str] = None
+    source: str = "notion"
+    external_ref: Optional[str] = None
+    stakeholder_id: Optional[str] = None
+    captured_at: Optional[str] = None  # ISO datetime
+
+
 def _parse_dt(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
@@ -245,6 +254,49 @@ def setup_client_routes():
         if rec is None:
             raise HTTPException(404, "Stakeholder not found")
         return rec
+
+    # ----- Meeting transcripts -----
+    @router.post("/{client_id}/transcripts")
+    def add_transcript(request: Request, client_id: str, body: TranscriptCreate):
+        user = require_user(request)
+        t = svc.add_transcript(user, client_id, content=body.content, title=body.title,
+                               source=body.source, external_ref=body.external_ref,
+                               stakeholder_id=body.stakeholder_id,
+                               captured_at=_parse_dt(body.captured_at))
+        if t is None:
+            raise HTTPException(404, "Client or stakeholder not found")
+        return t
+
+    @router.get("/{client_id}/transcripts")
+    def list_transcripts(request: Request, client_id: str):
+        user = require_user(request)
+        rows = svc.list_transcripts(user, client_id)
+        if rows is None:
+            raise HTTPException(404, "Client not found")
+        return {"transcripts": rows}
+
+    @router.get("/transcripts/{transcript_id}")
+    def get_transcript(request: Request, transcript_id: str):
+        user = require_user(request)
+        t = svc.get_transcript(user, transcript_id)
+        if not t:
+            raise HTTPException(404, "Transcript not found")
+        return t
+
+    @router.delete("/transcripts/{transcript_id}")
+    def delete_transcript(request: Request, transcript_id: str):
+        user = require_user(request)
+        if not svc.delete_transcript(user, transcript_id):
+            raise HTTPException(404, "Transcript not found")
+        return {"ok": True}
+
+    @router.get("/transcripts/{transcript_id}/synthesis-context")
+    def synthesis_context(request: Request, transcript_id: str):
+        user = require_user(request)
+        ctx = svc.build_synthesis_context(user, transcript_id)
+        if ctx is None:
+            raise HTTPException(404, "Transcript not found")
+        return ctx
 
     # ----- Bridging rituals -----
     @router.post("/stakeholders/{stakeholder_id}/rituals")
