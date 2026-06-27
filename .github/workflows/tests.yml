@@ -13,6 +13,12 @@ jobs:
   pytest:
     name: pytest (${{ matrix.os }} / py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
+    # Defense-in-depth for the Windows job: force UTF-8 as the default text
+    # encoding so any file read without an explicit encoding (in tests or app
+    # code) can't fail with a cp1252 UnicodeDecodeError. Tests also pass
+    # encoding="utf-8" explicitly; this is the backstop.
+    env:
+      PYTHONUTF8: "1"
     strategy:
       fail-fast: false
       matrix:
