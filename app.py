@@ -688,6 +688,10 @@ logger.info("Webhook & API token routes initialized")
 from routes.note_routes import setup_note_routes
 app.include_router(setup_note_routes(task_scheduler))
 
+# Client workspaces (Buildout Phase 01): owner-scoped CM engagement model.
+from routes.client_routes import setup_client_routes
+app.include_router(setup_client_routes())
+
 # Email
 from routes.email_routes import setup_email_routes
 app.include_router(setup_email_routes())

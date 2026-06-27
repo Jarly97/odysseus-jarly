@@ -7,12 +7,11 @@ DB so it never touches the real data/app.db.
 import os
 import tempfile
 
-# Point the DB at a throwaway file BEFORE importing core.database (engine binds at import).
-_TMPDIR = tempfile.mkdtemp(prefix="odysseus_cw_test_")
-os.environ["DATABASE_URL"] = "sqlite:///" + os.path.join(_TMPDIR, "cw_test.db").replace("\\", "/")
+import pytest
+from sqlalchemy import create_engine, text
 
-from sqlalchemy import text  # noqa: E402
-from core.database import (  # noqa: E402
+import core.database as _db
+from core.database import (
     SessionLocal,
     Client,
     ClientStakeholder,
@@ -20,6 +19,20 @@ from core.database import (  # noqa: E402
     TRIScorecard,
     BridgingRitual,
 )
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _fresh_db():
+    """Bind SessionLocal to a throwaway DB for this module, then restore.
+    SessionLocal is the same object imported above, so configure() mutates it in place."""
+    tmp = tempfile.mkdtemp(prefix="odysseus_cw_test_")
+    eng = create_engine("sqlite:///" + os.path.join(tmp, "cw.db").replace("\\", "/"),
+                        connect_args={"check_same_thread": False})
+    _db.Base.metadata.create_all(eng)
+    orig = _db.engine
+    _db.SessionLocal.configure(bind=eng)
+    yield
+    _db.SessionLocal.configure(bind=orig)
 
 
 def _seed(db, owner="karl", client_id="c1", sk_id="s1"):
