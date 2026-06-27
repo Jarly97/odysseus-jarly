@@ -127,3 +127,35 @@ async def synthesize(user: str, transcript_id: str, artifact_kind: str,
         "client_id": (context.get("client") or {}).get("id"),
         "stakeholder_id": (context.get("transcript") or {}).get("stakeholder_id"),
     }
+
+
+async def synthesize_resolved(user: str, transcript_id: str, artifact_kind: str,
+                              temperature: float = 0.3, max_tokens: int = 1500) -> Optional[dict]:
+    """Like synthesize(), but resolves the caller's default LLM endpoint + fallback
+    chain itself (the proven resolve_endpoint('default') + fallbacks idiom), so it
+    can be called from a route or agent tool without the caller passing an endpoint.
+
+    Returns None if the transcript isn't owned/found, or {"error": ...} if no LLM
+    endpoint is configured."""
+    if artifact_kind not in ARTIFACT_KINDS:
+        raise ValueError(f"Unknown artifact kind: {artifact_kind!r}")
+    context = clients.build_synthesis_context(user, transcript_id)
+    if context is None:
+        return None
+    messages = build_synthesis_prompt(context, artifact_kind)
+    from src.endpoint_resolver import resolve_endpoint, resolve_chat_fallback_candidates
+    from src.llm_core import llm_call_async_with_fallback
+    url, model, headers = resolve_endpoint("default")
+    if not url or not model:
+        return {"error": "No LLM endpoint configured", "artifact_kind": artifact_kind}
+    candidates = [(url, model, headers)] + resolve_chat_fallback_candidates(user)
+    content = await llm_call_async_with_fallback(candidates, messages, temperature=temperature,
+                                                 max_tokens=max_tokens, prompt_type="cm_synthesis")
+    return {
+        "artifact_kind": artifact_kind,
+        "title": ARTIFACT_KINDS[artifact_kind]["title"],
+        "content": content,
+        "transcript_id": transcript_id,
+        "client_id": (context.get("client") or {}).get("id"),
+        "stakeholder_id": (context.get("transcript") or {}).get("stakeholder_id"),
+    }

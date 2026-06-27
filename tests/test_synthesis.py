@@ -4,15 +4,43 @@ Prompt builder is tested deterministically (no DB); synthesize() is tested with 
 mocked LLM against a seeded throwaway DB.
 """
 import asyncio
+import json
 import os
 import tempfile
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 
 import core.database as _db
 from src import clients as svc
 from src import synthesis
+from src.tool_implementations import do_manage_clients
+from routes.client_routes import setup_client_routes
+
+
+def _patch_llm(monkeypatch, captured=None):
+    """Point the resolved-synthesis path at a fake endpoint + fake LLM."""
+    monkeypatch.setattr("src.endpoint_resolver.resolve_endpoint",
+                        lambda name: ("http://x/v1/chat/completions", "m1", {}))
+    monkeypatch.setattr("src.endpoint_resolver.resolve_chat_fallback_candidates",
+                        lambda owner=None: [])
+
+    async def fake_llm(candidates, messages, **kw):
+        if captured is not None:
+            captured["candidates"] = candidates
+            captured["messages"] = messages
+        return "RESOLVED ARTIFACT"
+
+    monkeypatch.setattr("src.llm_core.llm_call_async_with_fallback", fake_llm)
+
+
+def _seed_transcript(owner="karl"):
+    c = svc.create_client(owner, "RVL Pharma", sector="pharma")
+    s = svc.add_stakeholder(owner, c["id"], "Amy", archetype="Authority Expert")
+    svc.upsert_itm(owner, s["id"], expected_loss="rainmaker loop", transition_stage="moving")
+    return c, s, svc.add_transcript(owner, c["id"], content="notes", stakeholder_id=s["id"])
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -81,3 +109,54 @@ def test_synthesize_with_mocked_llm(monkeypatch):
     # owner-scoped + missing transcript -> None
     assert asyncio.run(synthesis.synthesize("cto", t["id"], "comms_draft",
                                             endpoint_url="http://x", model="m1")) is None
+
+
+def test_synthesize_resolved(monkeypatch):
+    c, s, t = _seed_transcript("karl")
+    captured = {}
+    _patch_llm(monkeypatch, captured)
+    out = asyncio.run(synthesis.synthesize_resolved("karl", t["id"], "session_summary"))
+    assert out["content"] == "RESOLVED ARTIFACT" and out["artifact_kind"] == "session_summary"
+    # the resolved primary endpoint was prepended to the candidate list
+    assert captured["candidates"][0] == ("http://x/v1/chat/completions", "m1", {})
+    # the prompt carried the methodology grounding
+    assert any("rainmaker loop" in m["content"] for m in captured["messages"])
+    # not owned -> None
+    assert asyncio.run(synthesis.synthesize_resolved("cto", t["id"], "session_summary")) is None
+
+
+def test_synthesize_resolved_no_endpoint(monkeypatch):
+    c, s, t = _seed_transcript("karl")
+    monkeypatch.setattr("src.endpoint_resolver.resolve_endpoint", lambda name: (None, None, None))
+    out = asyncio.run(synthesis.synthesize_resolved("karl", t["id"], "session_summary"))
+    assert out and out.get("error")
+
+
+def test_synthesize_route(monkeypatch):
+    _patch_llm(monkeypatch)
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def _set_user(request, call_next):
+        request.state.current_user = request.headers.get("x-test-user") or None
+        return await call_next(request)
+
+    app.include_router(setup_client_routes())
+    http = TestClient(app)
+    _, _, t = _seed_transcript("routeuser")
+    r = http.post(f"/api/clients/transcripts/{t['id']}/synthesize",
+                  json={"artifact_kind": "comms_draft"}, headers={"x-test-user": "routeuser"})
+    assert r.status_code == 200, r.text
+    assert r.json()["content"] == "RESOLVED ARTIFACT"
+    # cross-owner -> 404
+    assert http.post(f"/api/clients/transcripts/{t['id']}/synthesize",
+                     json={"artifact_kind": "comms_draft"}, headers={"x-test-user": "nope"}).status_code == 404
+
+
+def test_synthesize_tool(monkeypatch):
+    _patch_llm(monkeypatch)
+    _, _, t = _seed_transcript("tooluser")
+    out = asyncio.run(do_manage_clients(
+        json.dumps({"action": "synthesize", "transcript_id": t["id"], "artifact_kind": "risk_log"}),
+        owner="tooluser"))
+    assert out["content"] == "RESOLVED ARTIFACT" and out["artifact_kind"] == "risk_log"

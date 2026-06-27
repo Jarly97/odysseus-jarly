@@ -498,7 +498,7 @@ FUNCTION_TOOL_SCHEMAS = [
                                         "list_stakeholders", "upsert_itm", "get_itm", "add_tri",
                                         "list_tri", "recommend_frames", "add_ritual", "complete_ritual",
                                         "add_transcript", "list_transcripts", "get_transcript",
-                                        "delete_transcript", "synthesis_context",
+                                        "delete_transcript", "synthesis_context", "synthesize",
                                         "update_stakeholder", "delete_stakeholder", "portfolio_summary"],
                                "description": "The operation to perform."},
                     "client_id": {"type": "string", "description": "Client id (for client/stakeholder ops)."},
@@ -540,7 +540,11 @@ FUNCTION_TOOL_SCHEMAS = [
                     "title": {"type": "string", "description": "Transcript title (add_transcript)."},
                     "source": {"type": "string", "description": "Transcript source: notion / granola / otter / manual."},
                     "external_ref": {"type": "string", "description": "Notion page id/url or notetaker id for the transcript."},
-                    "captured_at": {"type": "string", "description": "When the meeting occurred (ISO datetime)."}
+                    "captured_at": {"type": "string", "description": "When the meeting occurred (ISO datetime)."},
+                    "artifact_kind": {"type": "string",
+                                      "enum": ["session_summary", "comms_draft", "journey_update",
+                                               "risk_log", "itm_update", "tri_assessment"],
+                                      "description": "For 'synthesize': which methodology deliverable to produce from the transcript."}
                 },
                 "required": ["action"]
             }

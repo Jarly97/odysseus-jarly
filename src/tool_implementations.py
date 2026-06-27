@@ -1927,6 +1927,14 @@ async def do_manage_clients(content: str, owner: Optional[str] = None) -> Dict:
             return {"ok": _cl.delete_transcript(user, args.get("transcript_id"))}
         if action in ("synthesis_context", "build_synthesis_context"):
             return _cl.build_synthesis_context(user, args.get("transcript_id")) or {"error": "Transcript not found"}
+        if action in ("synthesize", "synthesize_artifact"):
+            from src import synthesis as _syn
+            kind = args.get("artifact_kind") or "session_summary"
+            try:
+                res = await _syn.synthesize_resolved(user, args.get("transcript_id"), kind)
+            except ValueError as e:
+                return {"error": str(e)}
+            return res if res is not None else {"error": "Transcript not found"}
         return {"error": f"Unknown action: {action!r}"}
     except ValueError as e:
         return {"error": str(e), "exit_code": 1}

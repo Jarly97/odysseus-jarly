@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from src.auth_helpers import require_user
 from src import clients as svc
 from src import methodology
+from src import synthesis
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,12 @@ class TranscriptCreate(BaseModel):
     external_ref: Optional[str] = None
     stakeholder_id: Optional[str] = None
     captured_at: Optional[str] = None  # ISO datetime
+
+
+class SynthesizeRequest(BaseModel):
+    artifact_kind: str
+    temperature: float = 0.3
+    max_tokens: int = 1500
 
 
 def _parse_dt(value: Optional[str]) -> Optional[datetime]:
@@ -324,6 +331,21 @@ def setup_client_routes():
         if ctx is None:
             raise HTTPException(404, "Transcript not found")
         return ctx
+
+    @router.post("/transcripts/{transcript_id}/synthesize")
+    async def synthesize_artifact(request: Request, transcript_id: str, body: SynthesizeRequest):
+        user = require_user(request)
+        try:
+            result = await synthesis.synthesize_resolved(
+                user, transcript_id, body.artifact_kind,
+                temperature=body.temperature, max_tokens=body.max_tokens)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        if result is None:
+            raise HTTPException(404, "Transcript not found")
+        if result.get("error"):
+            raise HTTPException(503, result["error"])
+        return result
 
     # ----- Bridging rituals -----
     @router.post("/stakeholders/{stakeholder_id}/rituals")
