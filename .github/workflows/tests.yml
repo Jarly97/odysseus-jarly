@@ -1,0 +1,37 @@
+name: tests
+
+# Phase 00 (Foundation & safety): the repo ships 358 tests but nothing ran them
+# in CI. This runs the suite on every push/PR across Linux + Windows so the
+# multi-user/confidentiality hardening can't regress silently.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  pytest:
+    name: pytest (${{ matrix.os }} / py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: pytest -q
