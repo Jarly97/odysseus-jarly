@@ -48,6 +48,13 @@ class StakeholderCreate(BaseModel):
     transition_stage: str = "unknown"
 
 
+class StakeholderUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    archetype: Optional[str] = None
+    transition_stage: Optional[str] = None
+
+
 class ITMUpsert(BaseModel):
     current_identity: Optional[str] = None
     target_identity: Optional[str] = None
@@ -109,6 +116,11 @@ def setup_client_routes():
     def get_portfolio(request: Request):
         user = require_user(request)
         return {"portfolio": svc.portfolio(user)}
+
+    @router.get("/portfolio/summary")
+    def get_portfolio_summary(request: Request):
+        user = require_user(request)
+        return svc.portfolio_summary(user)
 
     # ----- Methodology reference (declare BEFORE /{client_id}) -----
     @router.get("/methodology")
@@ -200,6 +212,21 @@ def setup_client_routes():
         if s is None:
             raise HTTPException(404, "Client not found")
         return s
+
+    @router.put("/stakeholders/{stakeholder_id}")
+    def update_stakeholder(request: Request, stakeholder_id: str, body: StakeholderUpdate):
+        user = require_user(request)
+        s = svc.update_stakeholder(user, stakeholder_id, **body.model_dump(exclude_unset=True))
+        if s is None:
+            raise HTTPException(404, "Stakeholder not found")
+        return s
+
+    @router.delete("/stakeholders/{stakeholder_id}")
+    def delete_stakeholder(request: Request, stakeholder_id: str):
+        user = require_user(request)
+        if not svc.delete_stakeholder(user, stakeholder_id):
+            raise HTTPException(404, "Stakeholder not found")
+        return {"ok": True}
 
     # ----- ITM (one per stakeholder) -----
     @router.get("/stakeholders/{stakeholder_id}/itm")

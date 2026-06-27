@@ -294,6 +294,30 @@ def get_stakeholder(user: str, stakeholder_id: str) -> Optional[dict]:
         return _stakeholder_dict(s) if s else None
 
 
+_STAKEHOLDER_FIELDS = {"name", "role", "archetype", "transition_stage"}
+
+
+def update_stakeholder(user: str, stakeholder_id: str, **fields) -> Optional[dict]:
+    with get_db_session() as db:
+        s = _owned_stakeholder(db, user, stakeholder_id)
+        if not s:
+            return None
+        for k, v in fields.items():
+            if k in _STAKEHOLDER_FIELDS and v is not None:
+                setattr(s, k, v)
+        db.flush()
+        return _stakeholder_dict(s)
+
+
+def delete_stakeholder(user: str, stakeholder_id: str) -> bool:
+    with get_db_session() as db:
+        s = _owned_stakeholder(db, user, stakeholder_id)
+        if not s:
+            return False
+        db.delete(s)  # FK cascade removes the stakeholder's ITM/TRI/rituals
+        return True
+
+
 # --------------------------------------------------------------------------- #
 # Meeting transcripts (Phase 03/04 — raw input to synthesis)
 # --------------------------------------------------------------------------- #
@@ -438,3 +462,22 @@ def portfolio(user: str) -> list[dict]:
 
         rows.sort(key=sort_key)
         return rows
+
+
+def portfolio_summary(user: str) -> dict:
+    """At-a-glance counts for a dashboard: stakeholders by stage, open-loss flags,
+    and client count — all owner-scoped."""
+    rows = portfolio(user)
+    by_stage: dict[str, int] = {}
+    open_loss = 0
+    for r in rows:
+        st = (r.get("transition_stage") or "unknown").lower()
+        by_stage[st] = by_stage.get(st, 0) + 1
+        if r.get("open_loss_flag"):
+            open_loss += 1
+    return {
+        "clients": len(list_clients(user)),
+        "stakeholders": len(rows),
+        "by_stage": by_stage,
+        "open_loss": open_loss,
+    }

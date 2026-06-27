@@ -1874,6 +1874,13 @@ async def do_manage_clients(content: str, owner: Optional[str] = None) -> Dict:
         if action == "list_stakeholders":
             rows = _cl.list_stakeholders(user, args.get("client_id"))
             return {"stakeholders": rows} if rows is not None else {"error": "Client not found"}
+        if action == "update_stakeholder":
+            updates = {k: args[k] for k in ("name", "role", "archetype", "transition_stage") if k in args}
+            return _cl.update_stakeholder(user, args.get("stakeholder_id"), **updates) or {"error": "Stakeholder not found"}
+        if action == "delete_stakeholder":
+            return {"ok": _cl.delete_stakeholder(user, args.get("stakeholder_id"))}
+        if action in ("portfolio_summary", "summary"):
+            return _cl.portfolio_summary(user)
         if action in ("upsert_itm", "set_itm", "itm"):
             fields = {k: args.get(k) for k in _cl._ITM_FIELDS if k in args}
             if "next_ritual_due" in fields:
