@@ -115,3 +115,25 @@ def test_portfolio_route_not_shadowed_by_client_id(client):
     names = [row["name"] for row in r.json()["portfolio"]]
     assert "Amy" in names
     assert client.get("/api/clients/portfolio", headers=_h("cto")).json()["portfolio"] == []
+
+
+def test_methodology_routes(client):
+    ref = client.get("/api/clients/methodology", headers=_h("karl"))
+    assert ref.status_code == 200
+    assert "current_identity" in ref.json()["itm_dimensions"]
+    fr = client.get("/api/clients/methodology/frames",
+                    params={"archetype": "Authority Expert", "stage": "moving"}, headers=_h("karl"))
+    assert [f["id"] for f in fr.json()["frames"]] == ["M5"]
+    tri = client.get("/api/clients/methodology/tri/30", headers=_h("karl"))
+    assert tri.json()["stage"] == "landing"
+
+
+def test_stakeholder_frames_route(client):
+    cid = client.post("/api/clients", json={"name": "RVL"}, headers=_h("karl")).json()["id"]
+    sid = client.post(f"/api/clients/{cid}/stakeholders",
+                      json={"name": "Amy", "archetype": "Authority Expert"}, headers=_h("karl")).json()["id"]
+    client.post(f"/api/clients/stakeholders/{sid}/tri", json={"total": 20}, headers=_h("karl"))
+    fr = client.get(f"/api/clients/stakeholders/{sid}/frames", headers=_h("karl"))
+    assert fr.status_code == 200 and fr.json()["stage"] == "moving"
+    assert [f["id"] for f in fr.json()["frames"]] == ["M5"]
+    assert client.get(f"/api/clients/stakeholders/{sid}/frames", headers=_h("cto")).status_code == 404

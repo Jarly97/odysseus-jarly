@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from src.auth_helpers import require_user
 from src import clients as svc
+from src import methodology
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,36 @@ def setup_client_routes():
     def get_portfolio(request: Request):
         user = require_user(request)
         return {"portfolio": svc.portfolio(user)}
+
+    # ----- Methodology reference (declare BEFORE /{client_id}) -----
+    @router.get("/methodology")
+    def methodology_reference(request: Request):
+        require_user(request)
+        return {
+            "itm_dimensions": list(methodology.ITM_DIMENSIONS),
+            "stages": list(methodology.STAGES),
+            "archetypes": list(methodology.ARCHETYPES),
+            "frames": {fid: {"stage_group": g, "title": t}
+                       for fid, (g, t) in methodology.FRAMES.items()},
+            "avoid_frames": list(methodology.AVOID_FRAMES),
+        }
+
+    @router.get("/methodology/frames")
+    def methodology_frames(request: Request, archetype: Optional[str] = None,
+                           stage: Optional[str] = None):
+        require_user(request)
+        return {
+            "archetype": archetype, "stage": stage,
+            "frames": methodology.select_frames(archetype, stage),
+            "avoid": list(methodology.AVOID_FRAMES),
+        }
+
+    @router.get("/methodology/tri/{total}")
+    def methodology_tri(request: Request, total: int):
+        require_user(request)
+        stage = methodology.tri_stage(total)
+        return {"total": total, "stage": stage,
+                "recommended_action": methodology.recommended_action(stage)}
 
     # ----- Clients -----
     @router.get("")
@@ -205,6 +236,15 @@ def setup_client_routes():
         if t is None:
             raise HTTPException(404, "Stakeholder not found")
         return t
+
+    # ----- Recommended comms frames for a stakeholder -----
+    @router.get("/stakeholders/{stakeholder_id}/frames")
+    def stakeholder_frames(request: Request, stakeholder_id: str):
+        user = require_user(request)
+        rec = svc.recommend_frames(user, stakeholder_id)
+        if rec is None:
+            raise HTTPException(404, "Stakeholder not found")
+        return rec
 
     # ----- Bridging rituals -----
     @router.post("/stakeholders/{stakeholder_id}/rituals")

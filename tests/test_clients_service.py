@@ -105,3 +105,21 @@ def test_portfolio_ordering():
     assert names.index("Tracy") < names.index("Becky") < names.index("Trill")
     # Portfolio is owner-scoped.
     assert svc.portfolio("cto") == []
+
+
+def test_tri_total_auto_derives_stage():
+    c = svc.create_client("karl", "RVL Pharma")
+    s = svc.add_stakeholder("karl", c["id"], "Amy Shah")
+    t = svc.add_tri("karl", s["id"], cycle="Day 60", total=30)  # no stage given -> 28-34 band
+    assert t["stage"] == "landing"
+    assert svc.list_stakeholders("karl", c["id"])[0]["transition_stage"] == "landing"
+
+
+def test_recommend_frames_for_stakeholder():
+    c = svc.create_client("karl", "RVL Pharma")
+    s = svc.add_stakeholder("karl", c["id"], "Amy Shah", archetype="Authority Expert")
+    svc.add_tri("karl", s["id"], total=20)  # -> moving
+    rec = svc.recommend_frames("karl", s["id"])
+    assert rec["archetype"] == "Authority Expert" and rec["stage"] == "moving"
+    assert [f["id"] for f in rec["frames"]] == ["M5"]
+    assert svc.recommend_frames("cto", s["id"]) is None

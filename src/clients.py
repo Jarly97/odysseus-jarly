@@ -24,6 +24,7 @@ from core.database import (
     TRIScorecard,
     BridgingRitual,
 )
+from src import methodology
 
 # Stage ordering for the portfolio roll-up: stuck first, unknown last.
 _STAGE_ORDER = {"stuck": 0, "at-risk": 1, "moving": 2, "landing": 3, "landed": 4, "unknown": 5}
@@ -231,6 +232,10 @@ def add_tri(user: str, stakeholder_id: str, cycle: Optional[str] = None,
         s = _owned_stakeholder(db, user, stakeholder_id)
         if not s:
             return None
+        # Derive the stage from the TRI total when the caller didn't supply one
+        # (TRI v1.2 scoring bands), so the scorecard and stakeholder stay in sync.
+        if stage is None and total is not None:
+            stage = methodology.tri_stage(total)
         t = TRIScorecard(id=_new_id(), stakeholder_id=stakeholder_id, client_id=s.client_id,
                          cycle=cycle, administered_at=datetime.utcnow(),
                          scores=scores or {}, total=total, stage=stage, direction=direction,
@@ -280,6 +285,25 @@ def complete_ritual(user: str, ritual_id: str, acknowledged: bool = False) -> Op
         r.acknowledged = acknowledged
         db.flush()
         return _ritual_dict(r)
+
+
+# --------------------------------------------------------------------------- #
+# Methodology — comms frame recommendation for a stakeholder
+# --------------------------------------------------------------------------- #
+def recommend_frames(user: str, stakeholder_id: str) -> Optional[dict]:
+    """Recommend comms frames for a stakeholder from their archetype + current
+    stage (Comms Library selection matrix). None if not owned/found."""
+    with get_db_session() as db:
+        s = _owned_stakeholder(db, user, stakeholder_id)
+        if not s:
+            return None
+        return {
+            "stakeholder_id": s.id,
+            "archetype": s.archetype,
+            "stage": s.transition_stage,
+            "frames": methodology.select_frames(s.archetype, s.transition_stage),
+            "avoid": list(methodology.AVOID_FRAMES),
+        }
 
 
 # --------------------------------------------------------------------------- #
