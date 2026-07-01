@@ -1820,6 +1820,127 @@ async def do_api_call(content: str) -> Dict:
 
 
 # ---------------------------------------------------------------------------
+# Client workspace management tool (CM engagements)
+# ---------------------------------------------------------------------------
+
+async def do_manage_clients(content: str, owner: Optional[str] = None) -> Dict:
+    """Manage CM client workspaces (Buildout Phase 01/04): clients, stakeholders,
+    ITM, TRI scorecards, bridging rituals, and methodology frame recommendations.
+
+    Owner-scoped to the caller (confidential client data). Delegates to src.clients.
+    """
+    from datetime import datetime as _dt
+    from src import clients as _cl
+
+    try:
+        args = _parse_tool_args(content)
+    except ValueError:
+        return {"error": "Invalid JSON arguments", "exit_code": 1}
+
+    action = (args.get("action") or "").replace("-", "_").strip().lower()
+    user = owner or ""
+
+    def _dtp(v):
+        if not v:
+            return None
+        try:
+            return _dt.fromisoformat(str(v).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    try:
+        if action in ("portfolio", "list_portfolio"):
+            return {"portfolio": _cl.portfolio(user)}
+        if action in ("list_clients", "list"):
+            return {"clients": _cl.list_clients(user)}
+        if action in ("create_client", "create", "add_client"):
+            return _cl.create_client(user, args.get("name"), sponsor=args.get("sponsor"),
+                                     sector=args.get("sector"),
+                                     model_policy=args.get("model_policy", "local-sensitive"),
+                                     notes=args.get("notes"))
+        if action in ("get_client", "get"):
+            return _cl.get_client(user, args.get("client_id")) or {"error": "Client not found"}
+        if action == "update_client":
+            updates = {k: args[k] for k in ("name", "sponsor", "sector", "status",
+                                            "model_policy", "notes") if k in args}
+            return _cl.update_client(user, args.get("client_id"), **updates) or {"error": "Client not found"}
+        if action == "delete_client":
+            return {"ok": _cl.delete_client(user, args.get("client_id"))}
+        if action == "add_stakeholder":
+            return _cl.add_stakeholder(user, args.get("client_id"), args.get("name"),
+                                       role=args.get("role"), archetype=args.get("archetype"),
+                                       transition_stage=args.get("transition_stage", "unknown")) \
+                or {"error": "Client not found"}
+        if action == "list_stakeholders":
+            rows = _cl.list_stakeholders(user, args.get("client_id"))
+            return {"stakeholders": rows} if rows is not None else {"error": "Client not found"}
+        if action == "update_stakeholder":
+            updates = {k: args[k] for k in ("name", "role", "archetype", "transition_stage") if k in args}
+            return _cl.update_stakeholder(user, args.get("stakeholder_id"), **updates) or {"error": "Stakeholder not found"}
+        if action == "delete_stakeholder":
+            return {"ok": _cl.delete_stakeholder(user, args.get("stakeholder_id"))}
+        if action in ("portfolio_summary", "summary"):
+            return _cl.portfolio_summary(user)
+        if action in ("upsert_itm", "set_itm", "itm"):
+            fields = {k: args.get(k) for k in _cl._ITM_FIELDS if k in args}
+            if "next_ritual_due" in fields:
+                fields["next_ritual_due"] = _dtp(fields["next_ritual_due"])
+            if "date_completed" in fields:
+                fields["date_completed"] = _dtp(fields["date_completed"])
+            return _cl.upsert_itm(user, args.get("stakeholder_id"), **fields) or {"error": "Stakeholder not found"}
+        if action == "get_itm":
+            if not args.get("stakeholder_id"):
+                return {"error": "stakeholder_id required"}
+            return _cl.get_itm(user, args.get("stakeholder_id")) or {}
+        if action in ("add_tri", "record_tri", "tri"):
+            return _cl.add_tri(user, args.get("stakeholder_id"), cycle=args.get("cycle"),
+                               scores=args.get("scores"), total=args.get("total"),
+                               stage=args.get("stage"), direction=args.get("direction"),
+                               tri_version=args.get("tri_version"), operator=args.get("operator"),
+                               priority_action=args.get("priority_action")) \
+                or {"error": "Stakeholder not found"}
+        if action == "list_tri":
+            rows = _cl.list_tri(user, args.get("stakeholder_id"))
+            return {"scorecards": rows} if rows is not None else {"error": "Stakeholder not found"}
+        if action in ("recommend_frames", "frames"):
+            return _cl.recommend_frames(user, args.get("stakeholder_id")) or {"error": "Stakeholder not found"}
+        if action in ("add_ritual", "ritual"):
+            return _cl.add_ritual(user, args.get("stakeholder_id"), args.get("name"),
+                                  scheduled_at=_dtp(args.get("scheduled_at")), note=args.get("note")) \
+                or {"error": "Stakeholder not found"}
+        if action == "complete_ritual":
+            return _cl.complete_ritual(user, args.get("ritual_id"),
+                                       acknowledged=bool(args.get("acknowledged"))) or {"error": "Ritual not found"}
+        if action == "add_transcript":
+            return _cl.add_transcript(user, args.get("client_id"), content=args.get("content"),
+                                      title=args.get("title"), source=args.get("source", "notion"),
+                                      external_ref=args.get("external_ref"),
+                                      stakeholder_id=args.get("stakeholder_id"),
+                                      captured_at=_dtp(args.get("captured_at"))) \
+                or {"error": "Client or stakeholder not found"}
+        if action == "list_transcripts":
+            rows = _cl.list_transcripts(user, args.get("client_id"))
+            return {"transcripts": rows} if rows is not None else {"error": "Client not found"}
+        if action == "get_transcript":
+            return _cl.get_transcript(user, args.get("transcript_id")) or {"error": "Transcript not found"}
+        if action == "delete_transcript":
+            return {"ok": _cl.delete_transcript(user, args.get("transcript_id"))}
+        if action in ("synthesis_context", "build_synthesis_context"):
+            return _cl.build_synthesis_context(user, args.get("transcript_id")) or {"error": "Transcript not found"}
+        if action in ("synthesize", "synthesize_artifact"):
+            from src import synthesis as _syn
+            kind = args.get("artifact_kind") or "session_summary"
+            try:
+                res = await _syn.synthesize_resolved(user, args.get("transcript_id"), kind)
+            except ValueError as e:
+                return {"error": str(e)}
+            return res if res is not None else {"error": "Transcript not found"}
+        return {"error": f"Unknown action: {action!r}"}
+    except ValueError as e:
+        return {"error": str(e), "exit_code": 1}
+
+
+# ---------------------------------------------------------------------------
 # Notes / checklists management tool
 # ---------------------------------------------------------------------------
 

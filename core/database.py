@@ -1889,6 +1889,138 @@ def archive_session(session_id: str):
             return True
     return False
 
+# ---------------------------------------------------------------------------
+# Client workspaces — methodology-native data model (Buildout Phase 01)
+#
+# These tables make Odysseus natively shaped to the Kaldway "Path 1 — Identity
+# Transition" methodology. The field sets mirror the source docs 1:1 so the same
+# schema doubles as the Notion sync contract (see CM-Strategy/methodology):
+#   - Stakeholder + ITMRecord  -> ITM Template v1.2 ("running at portfolio scale")
+#   - TRIScorecard             -> TRI v1.2 ("scoring at portfolio scale")
+#   - BridgingRitual           -> Transition Dashboard Spec (DB3)
+# Owner-scoped like the rest of the app; null owner = legacy/shared.
+# ---------------------------------------------------------------------------
+
+class Client(TimestampMixin, Base):
+    """A client engagement workspace — the organizing unit the agent operates within."""
+    __tablename__ = "clients"
+
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    sponsor = Column(String, nullable=True)          # exec sponsor / bridge (e.g. Patrick @ RVL)
+    sector = Column(String, nullable=True)           # e.g. "pharma" — drives guardrails
+    status = Column(String, nullable=True, default="active")  # active / paused / closed
+    # Per-client model policy for the sensitivity-routing layer (local vs cloud).
+    model_policy = Column(String, nullable=True, default="local-sensitive")
+    notes = Column(Text, nullable=True)
+    owner = Column(String, nullable=True, index=True)  # creating operator; null = shared/legacy
+
+
+class ClientStakeholder(TimestampMixin, Base):
+    """A primary stakeholder inside a client engagement."""
+    __tablename__ = "client_stakeholders"
+
+    id = Column(String, primary_key=True, index=True)
+    client_id = Column(String, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    role = Column(String, nullable=True)
+    # ITM archetype: Responsiveness Gatekeeper / High-Capacity Executor / Authority Expert / null
+    archetype = Column(String, nullable=True)
+    transition_stage = Column(String, nullable=True, default="unknown")  # stuck/moving/landing/landed/unknown
+    owner = Column(String, nullable=True, index=True)
+
+    client = relationship("Client", backref=backref("stakeholders", cascade="all, delete-orphan"))
+
+    __table_args__ = (
+        Index("ix_stakeholder_portfolio", "owner", "transition_stage"),  # portfolio roll-up
+    )
+
+
+class ITMRecord(TimestampMixin, Base):
+    """Identity Transition Map — one per stakeholder. Five dimensions + review state."""
+    __tablename__ = "itm_records"
+
+    id = Column(String, primary_key=True, index=True)
+    stakeholder_id = Column(String, ForeignKey("client_stakeholders.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_id = Column(String, ForeignKey("clients.id", ondelete="CASCADE"), nullable=True, index=True)
+    # The five dimensions
+    current_identity = Column(Text, nullable=True)
+    target_identity = Column(Text, nullable=True)
+    expected_loss = Column(Text, nullable=True)
+    target_gain = Column(Text, nullable=True)
+    bridging_rituals = Column(Text, nullable=True)
+    # Review state
+    transition_stage = Column(String, nullable=True, default="unknown")
+    date_completed = Column(DateTime, nullable=True)
+    last_reviewed = Column(DateTime, nullable=True)
+    next_ritual_due = Column(DateTime, nullable=True)
+    open_loss_flag = Column(Boolean, default=False)  # peer-review-pending loss diagnosis
+    operator = Column(String, nullable=True)
+    assessment_note = Column(Text, nullable=True)
+    owner = Column(String, nullable=True, index=True)
+
+    stakeholder = relationship("ClientStakeholder", backref=backref("itm_records", cascade="all, delete-orphan"))
+
+
+class TRIScorecard(TimestampMixin, Base):
+    """Transition Readiness Instrument scorecard — one per stakeholder per cycle."""
+    __tablename__ = "tri_scorecards"
+
+    id = Column(String, primary_key=True, index=True)
+    stakeholder_id = Column(String, ForeignKey("client_stakeholders.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_id = Column(String, ForeignKey("clients.id", ondelete="CASCADE"), nullable=True, index=True)
+    cycle = Column(String, nullable=True)            # "Day 0" / "Day 30" / "Day 60" / "Day 90"
+    administered_at = Column(DateTime, nullable=True)
+    scores = Column(JSON, default=dict)              # {"1": {"score": 2, "note": "..."}, ...}
+    total = Column(Integer, nullable=True)
+    stage = Column(String, nullable=True)            # stuck/moving/landing/landed
+    direction = Column(String, nullable=True)        # up/flat/down
+    # Required: scores under different TRI versions are NOT comparable (TRI v1.2).
+    tri_version = Column(String, nullable=True)
+    operator = Column(String, nullable=True)
+    priority_action = Column(Text, nullable=True)
+    owner = Column(String, nullable=True, index=True)
+
+    stakeholder = relationship("ClientStakeholder", backref=backref("tri_scorecards", cascade="all, delete-orphan"))
+
+
+class BridgingRitual(TimestampMixin, Base):
+    """A designed, identity-affirming moment for a stakeholder (Dashboard Spec DB3)."""
+    __tablename__ = "bridging_rituals"
+
+    id = Column(String, primary_key=True, index=True)
+    stakeholder_id = Column(String, ForeignKey("client_stakeholders.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_id = Column(String, ForeignKey("clients.id", ondelete="CASCADE"), nullable=True, index=True)
+    name = Column(Text, nullable=False)
+    designed_at = Column(DateTime, nullable=True)
+    scheduled_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    acknowledged = Column(Boolean, default=False)
+    note = Column(Text, nullable=True)
+    owner = Column(String, nullable=True, index=True)
+
+    stakeholder = relationship("ClientStakeholder", backref=backref("bridging_rituals", cascade="all, delete-orphan"))
+
+
+class MeetingTranscript(TimestampMixin, Base):
+    """A meeting transcript attached to a client engagement (ingested from Notion,
+    a notetaker, or pasted manually) — the raw input to methodology synthesis
+    (Buildout Phase 03/04). FK to client cascades; stakeholder link is optional."""
+    __tablename__ = "meeting_transcripts"
+
+    id = Column(String, primary_key=True, index=True)
+    client_id = Column(String, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    stakeholder_id = Column(String, ForeignKey("client_stakeholders.id", ondelete="SET NULL"), nullable=True, index=True)
+    title = Column(String, nullable=True)
+    source = Column(String, nullable=True, default="notion")   # notion / granola / otter / manual
+    external_ref = Column(String, nullable=True)               # Notion page id/url or notetaker id
+    content = Column(Text, nullable=True)
+    captured_at = Column(DateTime, nullable=True)
+    owner = Column(String, nullable=True, index=True)
+
+    client = relationship("Client", backref=backref("transcripts", cascade="all, delete-orphan"))
+
+
 # Initialize the database by creating all tables
 
 

@@ -14,6 +14,8 @@ import ast
 import os
 from pathlib import Path
 
+import pytest
+
 SRC = Path(__file__).resolve().parent.parent / "routes" / "personal_routes.py"
 
 
@@ -26,7 +28,7 @@ def _function_source(src_text, name):
 
 
 def test_confinement_uses_realpath_not_abspath():
-    body = _function_source(SRC.read_text(), "_resolve_allowed_personal_dir")
+    body = _function_source(SRC.read_text(encoding="utf-8"), "_resolve_allowed_personal_dir")
     assert "os.path.realpath" in body, (
         "_resolve_allowed_personal_dir must use os.path.realpath so a symlink "
         "inside PERSONAL_DIR cannot escape the confinement check"
@@ -45,7 +47,13 @@ def test_realpath_catches_symlink_escape(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
     link = base / "escape"
-    os.symlink(outside, link)
+    try:
+        os.symlink(outside, link)
+    except (OSError, NotImplementedError) as e:
+        # Windows without admin/Developer Mode (WinError 1314) can't create
+        # symlinks. The confinement principle is platform-independent; skip
+        # where the OS won't let us build the fixture.
+        pytest.skip(f"symlink creation not permitted here: {e}")
 
     base_abs = os.path.realpath(base)  # base itself may live under a symlinked tmp
     # abspath: the symlink still looks inside base -> escape not detected
