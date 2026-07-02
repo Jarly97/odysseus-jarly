@@ -64,5 +64,42 @@ def test_bad_inputs():
     assert do_invalid_json() == {"error": "Invalid JSON arguments", "exit_code": 1}
 
 
+def test_delete_actions_refused_and_nothing_deleted():
+    """QA hardening: deletes are a prompt-injection data-loss vector — the agent
+    tool must refuse them and the data must survive."""
+    c = call({"action": "create_client", "name": "KeepMe"})
+    s = call({"action": "add_stakeholder", "client_id": c["id"], "name": "Amy"})
+    for args in (
+        {"action": "delete_client", "client_id": c["id"]},
+        {"action": "delete_stakeholder", "stakeholder_id": s["id"]},
+        {"action": "delete_transcript", "transcript_id": "whatever"},
+    ):
+        out = call(args)
+        assert "not available to the agent" in out.get("error", ""), args
+    # Data untouched
+    assert call({"action": "get_client", "client_id": c["id"]})["name"] == "KeepMe"
+    names = [x["name"] for x in call({"action": "list_stakeholders", "client_id": c["id"]})["stakeholders"]]
+    assert names == ["Amy"]
+
+
+def test_delete_actions_not_in_tool_schema():
+    # Import via agent_tools (the app's import order) — importing tool_schemas
+    # first trips its circular import with agent_tools.
+    from src.agent_tools import FUNCTION_TOOL_SCHEMAS
+    tool = next(t for t in FUNCTION_TOOL_SCHEMAS if t["function"]["name"] == "manage_clients")
+    actions = tool["function"]["parameters"]["properties"]["action"]["enum"]
+    for banned in ("delete_client", "delete_stakeholder", "delete_transcript"):
+        assert banned not in actions
+    for kept in ("notion_ingest", "notion_push", "synthesize", "portfolio"):
+        assert kept in actions
+
+
+def test_manage_clients_blocked_for_non_admin():
+    """Confidential client data: the tool is admin/single-user only until
+    per-client RBAC exists (same class as manage_memory/manage_calendar)."""
+    from src.tool_security import is_public_blocked_tool
+    assert is_public_blocked_tool("manage_clients") is True
+
+
 def do_invalid_json():
     return asyncio.run(do_manage_clients("{not json", owner="karl"))

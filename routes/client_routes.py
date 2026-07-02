@@ -106,6 +106,22 @@ class SynthesizeRequest(BaseModel):
     max_tokens: int = 1500
 
 
+class NotionConfigRequest(BaseModel):
+    token: Optional[str] = None   # write-only; never echoed back
+    parent: Optional[str] = None  # default parent page URL/id for pushes
+
+
+class NotionIngestRequest(BaseModel):
+    page: str                     # Notion page URL or id
+    stakeholder_id: Optional[str] = None
+
+
+class NotionPushRequest(BaseModel):
+    title: str
+    content: str
+    parent: Optional[str] = None
+
+
 def _parse_dt(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
@@ -158,6 +174,29 @@ def setup_client_routes():
         stage = methodology.tri_stage(total)
         return {"total": total, "stage": stage,
                 "recommended_action": methodology.recommended_action(stage)}
+
+    # ----- Notion (declare BEFORE /{client_id}) -----
+    @router.get("/notion/config")
+    def notion_config(request: Request):
+        user = require_user(request)
+        from src import notion_sync
+        return notion_sync.get_config(user)
+
+    @router.post("/notion/config")
+    def notion_config_save(request: Request, body: NotionConfigRequest):
+        user = require_user(request)
+        from src import notion_sync
+        return notion_sync.set_config(user, token=body.token, parent=body.parent)
+
+    @router.post("/notion/push")
+    async def notion_push(request: Request, body: NotionPushRequest):
+        user = require_user(request)
+        from src.notion_sync import NotionError
+        try:
+            return await svc.push_artifact_to_notion(user, body.title, body.content,
+                                                     parent=body.parent)
+        except (NotionError, ValueError) as e:
+            raise HTTPException(400, str(e))
 
     # ----- Clients -----
     @router.get("")
@@ -297,6 +336,19 @@ def setup_client_routes():
                                source=body.source, external_ref=body.external_ref,
                                stakeholder_id=body.stakeholder_id,
                                captured_at=_parse_dt(body.captured_at))
+        if t is None:
+            raise HTTPException(404, "Client or stakeholder not found")
+        return t
+
+    @router.post("/{client_id}/transcripts/notion")
+    async def ingest_notion_transcript(request: Request, client_id: str, body: NotionIngestRequest):
+        user = require_user(request)
+        from src.notion_sync import NotionError
+        try:
+            t = await svc.ingest_notion_transcript(user, client_id, body.page,
+                                                   stakeholder_id=body.stakeholder_id)
+        except NotionError as e:
+            raise HTTPException(400, str(e))
         if t is None:
             raise HTTPException(404, "Client or stakeholder not found")
         return t

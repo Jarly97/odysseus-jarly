@@ -164,12 +164,14 @@ function _renderView() {
       top.view === 'portfolio' ? 'Clients' :
       top.view === 'client' ? (top.clientName || 'Client') :
       top.view === 'stakeholder' ? (top.stakeholderName || 'Stakeholder') :
+      top.view === 'settings' ? 'Notion settings' :
       top.title || 'Artifact';
   }
   if (top.view === 'portfolio') _renderPortfolio();
   else if (top.view === 'client') _renderClient(top);
   else if (top.view === 'stakeholder') _renderStakeholder(top);
   else if (top.view === 'artifact') _renderArtifact(top);
+  else if (top.view === 'settings') _renderSettings();
 }
 
 // ── View: portfolio (home) ─────────────────────────────────────────────────
@@ -356,7 +358,8 @@ async function _renderClient(navEntry) {
 
     <div class="clients-section-label" style="display:flex;align-items:center;">Meeting transcripts
       <span style="flex:1"></span>
-      <button id="clients-add-tr-btn" class="memory-toolbar-btn">+ Add transcript</button>
+      <button id="clients-notion-tr-btn" class="memory-toolbar-btn" title="Pull a transcript from a Notion page">From Notion</button>
+      <button id="clients-add-tr-btn" class="memory-toolbar-btn" style="margin-left:6px;">+ Add transcript</button>
     </div>
     <div id="clients-add-tr-form" class="clients-form clients-card" style="display:none;">
       <div class="clients-form-row">
@@ -431,6 +434,21 @@ async function _renderClient(navEntry) {
       } catch (e) { uiModule.showError(e.message || 'Failed to add stakeholder'); }
     });
   }
+
+  body.querySelector('#clients-notion-tr-btn')?.addEventListener('click', async () => {
+    const page = await uiModule.styledPrompt('Notion page URL (the meeting transcript):',
+      { title: 'From Notion', confirmText: 'Pull', maxLength: 400 });
+    if (page === null || !page.trim()) return;
+    try {
+      const t = await _api(`/${client.id}/transcripts/notion`, {
+        method: 'POST', body: JSON.stringify({ page: page.trim() }),
+      });
+      uiModule.showToast(t.updated ? 'Transcript refreshed from Notion' : 'Transcript pulled from Notion');
+      _renderClient(navEntry);
+    } catch (e) {
+      uiModule.showError(e.message || 'Notion pull failed');
+    }
+  });
 
   const trBtn = body.querySelector('#clients-add-tr-btn');
   const trForm = body.querySelector('#clients-add-tr-form');
@@ -667,6 +685,7 @@ function _renderArtifact(navEntry) {
     <div class="clients-detail-head">
       <div class="clients-detail-title">${_esc(navEntry.title || 'Artifact')}</div>
       <span style="flex:1"></span>
+      <button id="clients-artifact-push" class="confirm-btn confirm-btn-secondary">Push to Notion</button>
       <button id="clients-artifact-copy" class="confirm-btn confirm-btn-primary">Copy</button>
     </div>
     <pre class="clients-artifact-pre">${_esc(navEntry.content || '(empty)')}</pre>
@@ -677,6 +696,83 @@ function _renderArtifact(navEntry) {
       uiModule.showToast('Copied to clipboard');
     } catch {
       uiModule.showError('Copy failed — select the text manually');
+    }
+  });
+  body.querySelector('#clients-artifact-push')?.addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    const doPush = async (parent) => _api('/notion/push', {
+      method: 'POST',
+      body: JSON.stringify({ title: navEntry.title || 'Artifact', content: navEntry.content || '', parent: parent || null }),
+    });
+    btn.disabled = true;
+    const prev = btn.textContent;
+    btn.textContent = 'Pushing…';
+    try {
+      let out;
+      try {
+        out = await doPush(null);
+      } catch (e) {
+        // No default parent configured — ask for one inline, then retry.
+        if (/parent page/i.test(e.message || '')) {
+          const parent = await uiModule.styledPrompt('Notion parent page URL (where the artifact page is created):',
+            { title: 'Push to Notion', confirmText: 'Push', maxLength: 400 });
+          if (parent === null) return;
+          out = await doPush(parent);
+        } else {
+          throw e;
+        }
+      }
+      uiModule.showToast('Pushed to Notion');
+      if (out && out.url) {
+        try { window.open(out.url, '_blank', 'noopener'); } catch { /* popup blocked — fine */ }
+      }
+    } catch (e) {
+      uiModule.showError(e.message || 'Push failed');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prev;
+    }
+  });
+}
+
+// ── View: Notion settings ───────────────────────────────────────────────────
+async function _renderSettings() {
+  const body = _body();
+  if (!body) return;
+  _setLoading(body, 'Loading settings…');
+  let cfg = { configured: false, parent: null };
+  try { cfg = await _api('/notion/config'); } catch { /* show defaults */ }
+  body.innerHTML = `
+    <div class="clients-section-label">Notion connection</div>
+    <div class="clients-card clients-form">
+      <div class="clients-dim" style="font-size:12px;">
+        ${cfg.configured
+          ? 'Connected — transcripts can be pulled from Notion pages and artifacts pushed back.'
+          : 'Not connected. Create an internal integration at notion.so/my-integrations, share your CM pages with it (Share → Add connections), and paste its secret below.'}
+      </div>
+      <label class="clients-field-label">Integration token <span class="clients-dim">— stored encrypted, never shown again</span></label>
+      <input id="clients-notion-token" class="memory-search-input" type="password"
+             placeholder="${cfg.configured ? 'Configured — paste a new token to replace' : 'ntn_… / secret_…'}" style="margin-top:0;" />
+      <label class="clients-field-label">Default parent page <span class="clients-dim">— where pushed artifacts are created</span></label>
+      <input id="clients-notion-parent" class="memory-search-input"
+             placeholder="https://www.notion.so/Your-Page-…" value="${_esc(cfg.parent || '')}" style="margin-top:0;" />
+      <div class="clients-form-actions">
+        <button id="clients-notion-save" class="confirm-btn confirm-btn-primary">Save</button>
+      </div>
+    </div>
+  `;
+  body.querySelector('#clients-notion-save')?.addEventListener('click', async () => {
+    const token = body.querySelector('#clients-notion-token')?.value?.trim();
+    const parent = body.querySelector('#clients-notion-parent')?.value?.trim();
+    try {
+      const out = await _api('/notion/config', {
+        method: 'POST',
+        body: JSON.stringify({ token: token || null, parent: parent != null ? parent : null }),
+      });
+      uiModule.showToast(out.configured ? 'Notion connected' : 'Saved');
+      _navBack();
+    } catch (e) {
+      uiModule.showError(e.message || 'Failed to save');
     }
   });
 }
@@ -705,6 +801,9 @@ function openPanel() {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px;"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg><span id="clients-pane-title-text">Clients</span>
       </h4>
       <span style="flex:1"></span>
+      <button id="clients-settings-btn" class="doc-action-icon-btn" title="Notion settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>
+      </button>
       <button id="clients-refresh-btn" class="doc-action-icon-btn" title="Refresh">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
       </button>
@@ -751,6 +850,10 @@ function openPanel() {
   pane.querySelector('#clients-close-btn')?.addEventListener('click', () => closePanel());
   pane.querySelector('#clients-back-btn')?.addEventListener('click', () => _navBack());
   pane.querySelector('#clients-refresh-btn')?.addEventListener('click', () => _renderView());
+  pane.querySelector('#clients-settings-btn')?.addEventListener('click', () => {
+    const top = _nav[_nav.length - 1];
+    if (top.view !== 'settings') _navTo({ view: 'settings' });
+  });
 
   // Esc: back first, then close. Own handler, removed on close (notes.js pattern).
   _keydownHandler = (e) => {

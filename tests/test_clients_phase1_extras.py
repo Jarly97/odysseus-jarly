@@ -86,4 +86,7 @@ def test_tool_actions():
     sid = call({"action": "add_stakeholder", "client_id": cid, "name": "Amy"})["id"]
     assert call({"action": "update_stakeholder", "stakeholder_id": sid, "role": "CGO"})["role"] == "CGO"
     assert call({"action": "portfolio_summary"})["stakeholders"] >= 1
-    assert call({"action": "delete_stakeholder", "stakeholder_id": sid})["ok"] is True
+    # Deletes are refused at the tool layer (QA hardening); the service (UI path)
+    # still deletes for a confirmed human.
+    assert "not available to the agent" in call({"action": "delete_stakeholder", "stakeholder_id": sid})["error"]
+    assert svc.delete_stakeholder("karl", sid) is True
