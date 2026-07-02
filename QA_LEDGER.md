@@ -12,3 +12,11 @@ Recurring defect classes and review history for this project.
 **Recurred from prior runs:** n/a (first ledger entry).
 **Systemic signal:** when adding a tool to the agent surface, two checklists are easy to miss — (1) the `NON_ADMIN_BLOCKED_TOOLS` policy, (2) whether destructive actions belong on an agent-reachable surface at all.
 **Coverage gap closed:** Windows test collection now clean (1880 collected). **Opened:** no tests for non-admin/public gating of `manage_clients`, nor for cascade behavior of transcript deletion.
+
+## 2026-07-01 — Remediation pass (commit bf4a2a6)
+**Fixed from 2026-06-26:**
+- Agent-tool blast radius → `delete_client/delete_stakeholder/delete_transcript` removed from the `manage_clients` schema and refused at dispatch with guidance to the (styledConfirm-gated) Clients panel. Test: `test_delete_actions_refused_and_nothing_deleted`.
+- Security-policy drift → `manage_clients` added to `NON_ADMIN_BLOCKED_TOOLS`. Test: `test_manage_clients_blocked_for_non_admin`.
+- Data-residency gap → `synthesize_resolved` now enforces `model_policy` via `is_local_endpoint()` candidate filtering; `local-*` policies fail closed with actionable guidance. Tests: `test_model_policy_*` (3).
+**Still open:** confidentiality-conditioned-on-auth (accepted for single-user/localhost deployments; revisit with per-client RBAC).
+**Coverage gap closed:** non-admin gating + delete refusal + policy routing now tested (this run).
