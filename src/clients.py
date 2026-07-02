@@ -276,6 +276,16 @@ def add_ritual(user: str, stakeholder_id: str, name: str,
         return _ritual_dict(r)
 
 
+def list_rituals(user: str, stakeholder_id: str) -> Optional[list[dict]]:
+    with get_db_session() as db:
+        if not _owned_stakeholder(db, user, stakeholder_id):
+            return None
+        q = (db.query(BridgingRitual)
+             .filter(BridgingRitual.stakeholder_id == stakeholder_id)
+             .order_by(BridgingRitual.created_at))
+        return [_ritual_dict(r) for r in q.all()]
+
+
 def complete_ritual(user: str, ritual_id: str, acknowledged: bool = False) -> Optional[dict]:
     with get_db_session() as db:
         r = _scoped(db.query(BridgingRitual).filter(BridgingRitual.id == ritual_id),
@@ -379,6 +389,56 @@ def delete_transcript(user: str, transcript_id: str) -> bool:
             return False
         db.delete(t)
         return True
+
+
+async def ingest_notion_transcript(user: str, client_id: str, page_ref: str,
+                                   stakeholder_id: Optional[str] = None) -> Optional[dict]:
+    """Fetch a Notion page and save it as this client's meeting transcript.
+    Re-ingesting the same page updates the existing transcript instead of
+    duplicating it. None when the client/stakeholder isn't owned; raises
+    src.notion_sync.NotionError for config/API problems (maps to HTTP 400)."""
+    from src import notion_sync
+    with get_db_session() as db:
+        if not _owned_client(db, user, client_id):
+            return None
+        if stakeholder_id:
+            s = _owned_stakeholder(db, user, stakeholder_id)
+            if not s or s.client_id != client_id:
+                return None
+    page = await notion_sync.fetch_page(user, page_ref)
+    with get_db_session() as db:
+        existing = _scoped(
+            db.query(MeetingTranscript).filter(
+                MeetingTranscript.client_id == client_id,
+                MeetingTranscript.external_ref == page["page_id"],
+            ),
+            MeetingTranscript, user,
+        ).first()
+        if existing:
+            existing.title = page["title"]
+            existing.content = page["text"]
+            if stakeholder_id:
+                existing.stakeholder_id = stakeholder_id
+            db.flush()
+            out = _transcript_dict(existing)
+            out["updated"] = True
+            return out
+    out = add_transcript(user, client_id, content=page["text"], title=page["title"],
+                         source="notion", external_ref=page["page_id"],
+                         stakeholder_id=stakeholder_id)
+    if out is not None:
+        out["updated"] = False
+    return out
+
+
+async def push_artifact_to_notion(user: str, title: str, content: str,
+                                  parent: Optional[str] = None) -> dict:
+    """Create a Notion page with an artifact's content. Raises NotionError for
+    config/API problems."""
+    from src import notion_sync
+    if not (content or "").strip():
+        raise ValueError("Artifact content is empty")
+    return await notion_sync.create_page(user, title or "Untitled artifact", content, parent=parent)
 
 
 def build_synthesis_context(user: str, transcript_id: str) -> Optional[dict]:

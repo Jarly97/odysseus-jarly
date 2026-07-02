@@ -129,6 +129,59 @@ async def synthesize(user: str, transcript_id: str, artifact_kind: str,
     }
 
 
+def is_local_endpoint(url: Optional[str]) -> bool:
+    """True when an endpoint URL points at a machine the operator controls
+    (loopback, RFC1918/private LAN, docker-host alias, .local/.ts.net names, or
+    a dotless LAN/Tailscale shortname). Used to enforce a client's model_policy:
+    'local-*' policies must never send transcripts to a cloud provider.
+
+    Conservative by design — a public hostname (api.anthropic.com, api.openai.com,
+    openrouter.ai, ...) never matches.
+    """
+    if not url:
+        return False
+    import ipaddress
+    from urllib.parse import urlparse
+    try:
+        host = (urlparse(url).hostname or "").strip().lower()
+    except ValueError:
+        return False
+    if not host:
+        return False
+    if host in ("localhost", "host.docker.internal", "host.containers.internal"):
+        return True
+    if host.endswith(".local") or host.endswith(".ts.net") or host.endswith(".lan"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return ip.is_private or ip.is_loopback
+    except ValueError:
+        pass
+    # Dotless shortname (e.g. `llm-host`, a Tailscale/hosts alias) — resolvable
+    # only on the operator's own network, so treat as local.
+    return "." not in host
+
+
+def _policy_filter_candidates(candidates: list, model_policy: Optional[str]):
+    """Apply a client's model policy to the (url, model, headers) candidate list.
+
+    'local-*' (the default 'local-sensitive' included) -> only local endpoints
+    survive; returns (filtered, error_or_None). Anything else -> unrestricted.
+    """
+    policy = (model_policy or "local-sensitive").strip().lower()
+    if not policy.startswith("local"):
+        return candidates, None
+    local = [c for c in candidates if is_local_endpoint(c[0])]
+    if not local:
+        return [], (
+            f"This client's model policy is '{policy}': synthesis must run on a "
+            "locally-served model, but no local endpoint is configured. Serve a "
+            "model via Cookbook (or add a local endpoint), or change the client's "
+            "model_policy to 'cloud-ok'."
+        )
+    return local, None
+
+
 async def synthesize_resolved(user: str, transcript_id: str, artifact_kind: str,
                               temperature: float = 0.3, max_tokens: int = 1500) -> Optional[dict]:
     """Like synthesize(), but resolves the caller's default LLM endpoint + fallback
@@ -149,6 +202,11 @@ async def synthesize_resolved(user: str, transcript_id: str, artifact_kind: str,
     if not url or not model:
         return {"error": "No LLM endpoint configured", "artifact_kind": artifact_kind}
     candidates = [(url, model, headers)] + resolve_chat_fallback_candidates(user)
+    # Enforce the client's model policy: confidential transcripts stay local.
+    candidates, policy_err = _policy_filter_candidates(
+        candidates, (context.get("client") or {}).get("model_policy"))
+    if policy_err:
+        return {"error": policy_err, "artifact_kind": artifact_kind}
     content = await llm_call_async_with_fallback(candidates, messages, temperature=temperature,
                                                  max_tokens=max_tokens, prompt_type="cm_synthesis")
     return {

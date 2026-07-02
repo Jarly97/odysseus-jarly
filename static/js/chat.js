@@ -2103,6 +2103,12 @@ import createResearchSynapse from './researchSynapse.js';
                   window._manageMemoryTimer = setTimeout(
                     () => window.dispatchEvent(new CustomEvent('memory-refresh')), 600);
                 }
+                // --- Live-refresh the Clients workspace after manage_clients ---
+                if (json.tool === 'manage_clients') {
+                  if (window._manageClientsTimer) clearTimeout(window._manageClientsTimer);
+                  window._manageClientsTimer = setTimeout(
+                    () => window.dispatchEvent(new CustomEvent('clients-refresh')), 600);
+                }
                 // --- Apply UI control actions embedded in tool_output ---
                 if (json.ui_event) {
                   chatStream.handleUIControl(json);

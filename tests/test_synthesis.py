@@ -125,6 +125,87 @@ def test_synthesize_resolved(monkeypatch):
     assert asyncio.run(synthesis.synthesize_resolved("cto", t["id"], "session_summary")) is None
 
 
+def test_is_local_endpoint():
+    local = [
+        "http://localhost:8000/v1/chat/completions",
+        "http://127.0.0.1:11434/v1",
+        "http://192.168.1.50:8000/v1",
+        "http://10.0.0.2:8080/v1",
+        "http://host.docker.internal:11434/v1",
+        "http://llm-host:8000/v1",          # dotless LAN/Tailscale shortname
+        "http://mymac.local:1234/v1",
+        "http://gpu-box.tailnet.ts.net:8000/v1",
+    ]
+    cloud = [
+        "https://api.anthropic.com/v1/messages",
+        "https://api.openai.com/v1/chat/completions",
+        "https://openrouter.ai/api/v1/chat/completions",
+        "https://ollama.com/api/chat",
+    ]
+    for u in local:
+        assert synthesis.is_local_endpoint(u), u
+    for u in cloud:
+        assert not synthesis.is_local_endpoint(u), u
+    assert not synthesis.is_local_endpoint(None)
+    assert not synthesis.is_local_endpoint("")
+
+
+def test_model_policy_blocks_cloud_synthesis(monkeypatch):
+    """QA hardening: 'local-sensitive' (the default) must refuse to send the
+    transcript to a cloud endpoint, with actionable guidance."""
+    c, s, t = _seed_transcript("policyuser")  # default model_policy=local-sensitive
+    monkeypatch.setattr("src.endpoint_resolver.resolve_endpoint",
+                        lambda name: ("https://api.anthropic.com/v1/messages", "m1", {}))
+    monkeypatch.setattr("src.endpoint_resolver.resolve_chat_fallback_candidates",
+                        lambda owner=None: [("https://api.openai.com/v1/chat/completions", "m2", {})])
+
+    async def fail_llm(candidates, messages, **kw):  # pragma: no cover
+        raise AssertionError("LLM must not be called when policy blocks all candidates")
+
+    monkeypatch.setattr("src.llm_core.llm_call_async_with_fallback", fail_llm)
+    out = asyncio.run(synthesis.synthesize_resolved("policyuser", t["id"], "session_summary"))
+    assert "local" in out["error"].lower() and "Cookbook" in out["error"]
+
+
+def test_model_policy_filters_to_local_candidates(monkeypatch):
+    """Cloud primary + local fallback under local-sensitive -> only the local
+    candidate reaches the LLM call."""
+    c, s, t = _seed_transcript("policyuser2")
+    monkeypatch.setattr("src.endpoint_resolver.resolve_endpoint",
+                        lambda name: ("https://api.anthropic.com/v1/messages", "cloud", {}))
+    monkeypatch.setattr("src.endpoint_resolver.resolve_chat_fallback_candidates",
+                        lambda owner=None: [("http://localhost:11434/v1/chat/completions", "llama", {})])
+    captured = {}
+
+    async def fake_llm(candidates, messages, **kw):
+        captured["candidates"] = candidates
+        return "LOCAL ARTIFACT"
+
+    monkeypatch.setattr("src.llm_core.llm_call_async_with_fallback", fake_llm)
+    out = asyncio.run(synthesis.synthesize_resolved("policyuser2", t["id"], "session_summary"))
+    assert out["content"] == "LOCAL ARTIFACT"
+    assert captured["candidates"] == [("http://localhost:11434/v1/chat/completions", "llama", {})]
+
+
+def test_model_policy_cloud_ok_unrestricted(monkeypatch):
+    c, s, t = _seed_transcript("policyuser3")
+    svc.update_client("policyuser3", c["id"], model_policy="cloud-ok")
+    monkeypatch.setattr("src.endpoint_resolver.resolve_endpoint",
+                        lambda name: ("https://api.anthropic.com/v1/messages", "cloud", {}))
+    monkeypatch.setattr("src.endpoint_resolver.resolve_chat_fallback_candidates",
+                        lambda owner=None: [])
+    captured = {}
+
+    async def fake_llm(candidates, messages, **kw):
+        captured["candidates"] = candidates
+        return "CLOUD ARTIFACT"
+
+    monkeypatch.setattr("src.llm_core.llm_call_async_with_fallback", fake_llm)
+    out = asyncio.run(synthesis.synthesize_resolved("policyuser3", t["id"], "session_summary"))
+    assert out["content"] == "CLOUD ARTIFACT"
+    assert captured["candidates"][0][1] == "cloud"
+
+
 def test_synthesize_resolved_no_endpoint(monkeypatch):
     c, s, t = _seed_transcript("karl")
     monkeypatch.setattr("src.endpoint_resolver.resolve_endpoint", lambda name: (None, None, None))

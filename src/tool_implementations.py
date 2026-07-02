@@ -1864,8 +1864,14 @@ async def do_manage_clients(content: str, owner: Optional[str] = None) -> Dict:
             updates = {k: args[k] for k in ("name", "sponsor", "sector", "status",
                                             "model_policy", "notes") if k in args}
             return _cl.update_client(user, args.get("client_id"), **updates) or {"error": "Client not found"}
-        if action == "delete_client":
-            return {"ok": _cl.delete_client(user, args.get("client_id"))}
+        if action in ("delete_client", "delete_stakeholder", "delete_transcript"):
+            # Deliberately unavailable to the agent: destructive, cascading, and a
+            # prompt-injection data-loss vector (untrusted transcript/skill text
+            # could instruct a delete). Humans delete via the Clients panel, which
+            # gates every delete behind an explicit confirm dialog.
+            return {"error": "Delete actions are not available to the agent. "
+                             "Ask the user to delete via the Clients panel (it "
+                             "confirms before deleting)."}
         if action == "add_stakeholder":
             return _cl.add_stakeholder(user, args.get("client_id"), args.get("name"),
                                        role=args.get("role"), archetype=args.get("archetype"),
@@ -1877,8 +1883,6 @@ async def do_manage_clients(content: str, owner: Optional[str] = None) -> Dict:
         if action == "update_stakeholder":
             updates = {k: args[k] for k in ("name", "role", "archetype", "transition_stage") if k in args}
             return _cl.update_stakeholder(user, args.get("stakeholder_id"), **updates) or {"error": "Stakeholder not found"}
-        if action == "delete_stakeholder":
-            return {"ok": _cl.delete_stakeholder(user, args.get("stakeholder_id"))}
         if action in ("portfolio_summary", "summary"):
             return _cl.portfolio_summary(user)
         if action in ("upsert_itm", "set_itm", "itm"):
@@ -1904,6 +1908,9 @@ async def do_manage_clients(content: str, owner: Optional[str] = None) -> Dict:
             return {"scorecards": rows} if rows is not None else {"error": "Stakeholder not found"}
         if action in ("recommend_frames", "frames"):
             return _cl.recommend_frames(user, args.get("stakeholder_id")) or {"error": "Stakeholder not found"}
+        if action == "list_rituals":
+            rows = _cl.list_rituals(user, args.get("stakeholder_id"))
+            return {"rituals": rows} if rows is not None else {"error": "Stakeholder not found"}
         if action in ("add_ritual", "ritual"):
             return _cl.add_ritual(user, args.get("stakeholder_id"), args.get("name"),
                                   scheduled_at=_dtp(args.get("scheduled_at")), note=args.get("note")) \
@@ -1923,8 +1930,6 @@ async def do_manage_clients(content: str, owner: Optional[str] = None) -> Dict:
             return {"transcripts": rows} if rows is not None else {"error": "Client not found"}
         if action == "get_transcript":
             return _cl.get_transcript(user, args.get("transcript_id")) or {"error": "Transcript not found"}
-        if action == "delete_transcript":
-            return {"ok": _cl.delete_transcript(user, args.get("transcript_id"))}
         if action in ("synthesis_context", "build_synthesis_context"):
             return _cl.build_synthesis_context(user, args.get("transcript_id")) or {"error": "Transcript not found"}
         if action in ("synthesize", "synthesize_artifact"):
@@ -1935,6 +1940,23 @@ async def do_manage_clients(content: str, owner: Optional[str] = None) -> Dict:
             except ValueError as e:
                 return {"error": str(e)}
             return res if res is not None else {"error": "Transcript not found"}
+        if action in ("notion_ingest", "ingest_notion"):
+            from src.notion_sync import NotionError
+            try:
+                res = await _cl.ingest_notion_transcript(user, args.get("client_id"),
+                                                         args.get("page"),
+                                                         stakeholder_id=args.get("stakeholder_id"))
+            except NotionError as e:
+                return {"error": str(e)}
+            return res if res is not None else {"error": "Client or stakeholder not found"}
+        if action in ("notion_push", "push_to_notion"):
+            from src.notion_sync import NotionError
+            try:
+                return await _cl.push_artifact_to_notion(user, args.get("title"),
+                                                         args.get("content"),
+                                                         parent=args.get("parent"))
+            except (NotionError, ValueError) as e:
+                return {"error": str(e)}
         return {"error": f"Unknown action: {action!r}"}
     except ValueError as e:
         return {"error": str(e), "exit_code": 1}

@@ -488,18 +488,20 @@ FUNCTION_TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "manage_clients",
-            "description": "Manage Change-Management client engagements (Kaldway Path 1 methodology). Create/list clients and their primary stakeholders; maintain each stakeholder's Identity Transition Map (ITM) and Transition Readiness Instrument (TRI) scorecards; log bridging rituals; and get recommended comms frames by archetype + stage. All data is private to the current user. Use 'portfolio' to see who needs attention next (stuck-first, then soonest ritual due).",
+            "description": "Manage Change-Management client engagements (Kaldway Path 1 methodology). Create/list clients and their primary stakeholders; maintain each stakeholder's Identity Transition Map (ITM) and Transition Readiness Instrument (TRI) scorecards; log bridging rituals; get recommended comms frames by archetype + stage; ingest Notion meeting transcripts (notion_ingest) and push artifacts to Notion (notion_push). All data is private to the current user. Use 'portfolio' to see who needs attention next (stuck-first, then soonest ritual due). Deleting clients/stakeholders/transcripts is NOT available here — the user deletes via the Clients panel.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "action": {"type": "string",
                                "enum": ["portfolio", "list_clients", "create_client", "get_client",
-                                        "update_client", "delete_client", "add_stakeholder",
+                                        "update_client", "add_stakeholder",
                                         "list_stakeholders", "upsert_itm", "get_itm", "add_tri",
-                                        "list_tri", "recommend_frames", "add_ritual", "complete_ritual",
+                                        "list_tri", "recommend_frames", "add_ritual", "list_rituals",
+                                        "complete_ritual",
                                         "add_transcript", "list_transcripts", "get_transcript",
-                                        "delete_transcript", "synthesis_context", "synthesize",
-                                        "update_stakeholder", "delete_stakeholder", "portfolio_summary"],
+                                        "synthesis_context", "synthesize",
+                                        "update_stakeholder", "portfolio_summary",
+                                        "notion_ingest", "notion_push"],
                                "description": "The operation to perform."},
                     "client_id": {"type": "string", "description": "Client id (for client/stakeholder ops)."},
                     "stakeholder_id": {"type": "string", "description": "Stakeholder id (for ITM/TRI/ritual/frame ops)."},
@@ -544,7 +546,9 @@ FUNCTION_TOOL_SCHEMAS = [
                     "artifact_kind": {"type": "string",
                                       "enum": ["session_summary", "comms_draft", "journey_update",
                                                "risk_log", "itm_update", "tri_assessment"],
-                                      "description": "For 'synthesize': which methodology deliverable to produce from the transcript."}
+                                      "description": "For 'synthesize': which methodology deliverable to produce from the transcript."},
+                    "page": {"type": "string", "description": "notion_ingest: Notion page URL or id holding the meeting transcript."},
+                    "parent": {"type": "string", "description": "notion_push: Notion parent page URL or id to create the artifact page under (falls back to the user's configured default)."}
                 },
                 "required": ["action"]
             }

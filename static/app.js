@@ -23,6 +23,7 @@ import galleryModule from './js/gallery.js';
 import tasksModule from './js/tasks.js';
 import calendarModule from './js/calendar.js';
 import notesModule from './js/notes.js';
+import clientsModule from './js/clients.js';
 import adminModule from './js/admin.js';
 import settingsModule from './js/settings.js';
 // Eagerly bind unified minimize/restore behavior across all tool modals.
@@ -914,6 +915,16 @@ function initializeEventListeners() {
       }
     });
   }
+
+  // Clients tool button (CM engagement workspace)
+  const toolClientsBtn = el('tool-clients-btn');
+  if (toolClientsBtn) {
+    toolClientsBtn.addEventListener('click', () => {
+      if (clientsModule) {
+        clientsModule.togglePanel();
+      }
+    });
+  }
   // Refresh notes due-reminder badge on load and every 5 minutes
   if (notesModule && notesModule.refreshDueBadge) {
     notesModule.refreshDueBadge();
@@ -1043,6 +1054,13 @@ function initializeEventListeners() {
     '/gallery':  () => document.getElementById('tool-gallery-btn')?.click(),
     '/tasks':    () => document.getElementById('tool-tasks-btn')?.click(),
     '/library':  () => sessionModule && sessionModule.openLibrary && sessionModule.openLibrary(),
+    '/clients':  () => {
+      if (!clientsModule) return;
+      // Keep the icon rail visible as the navigation strip alongside the
+      // client workspace (same treatment as /notes and /email).
+      _collapseSidebarToRail();
+      clientsModule.openPanel();
+    },
   };
   const _opener = _routeOpen[urlPath];
   // Defer the opener — at this point in init, the modules whose handlers
@@ -2387,6 +2405,7 @@ function initializeEventListeners() {
     // Per-tool visibility — fine-grained control over which entries show
     // inside the Tools section in the sidebar.
     'tool-calendar':       '#tool-calendar-btn',
+    'tool-clients':        '#tool-clients-btn',
     'tool-compare':        '#tool-compare-btn',
     'tool-cookbook':       '#tool-cookbook-btn',
     'tool-research':       '#tool-research-btn',
@@ -3447,6 +3466,7 @@ function startOdysseusApp() {
 
   // Rail tool buttons — delegate to sidebar tool buttons
   const _railToolMap = {
+    'rail-clients':   'tool-clients-btn',
     'rail-compare':   'tool-compare-btn',
     'rail-research':  'tool-research-btn',
     'rail-cookbook':   'tool-cookbook-btn',
