@@ -1904,6 +1904,9 @@ async def do_manage_clients(content: str, owner: Optional[str] = None) -> Dict:
             return {"scorecards": rows} if rows is not None else {"error": "Stakeholder not found"}
         if action in ("recommend_frames", "frames"):
             return _cl.recommend_frames(user, args.get("stakeholder_id")) or {"error": "Stakeholder not found"}
+        if action == "list_rituals":
+            rows = _cl.list_rituals(user, args.get("stakeholder_id"))
+            return {"rituals": rows} if rows is not None else {"error": "Stakeholder not found"}
         if action in ("add_ritual", "ritual"):
             return _cl.add_ritual(user, args.get("stakeholder_id"), args.get("name"),
                                   scheduled_at=_dtp(args.get("scheduled_at")), note=args.get("note")) \

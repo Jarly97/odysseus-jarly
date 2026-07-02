@@ -348,6 +348,14 @@ def setup_client_routes():
         return result
 
     # ----- Bridging rituals -----
+    @router.get("/stakeholders/{stakeholder_id}/rituals")
+    def list_rituals(request: Request, stakeholder_id: str):
+        user = require_user(request)
+        rows = svc.list_rituals(user, stakeholder_id)
+        if rows is None:
+            raise HTTPException(404, "Stakeholder not found")
+        return {"rituals": rows}
+
     @router.post("/stakeholders/{stakeholder_id}/rituals")
     def add_ritual(request: Request, stakeholder_id: str, body: RitualCreate):
         user = require_user(request)

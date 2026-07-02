@@ -276,6 +276,16 @@ def add_ritual(user: str, stakeholder_id: str, name: str,
         return _ritual_dict(r)
 
 
+def list_rituals(user: str, stakeholder_id: str) -> Optional[list[dict]]:
+    with get_db_session() as db:
+        if not _owned_stakeholder(db, user, stakeholder_id):
+            return None
+        q = (db.query(BridgingRitual)
+             .filter(BridgingRitual.stakeholder_id == stakeholder_id)
+             .order_by(BridgingRitual.created_at))
+        return [_ritual_dict(r) for r in q.all()]
+
+
 def complete_ritual(user: str, ritual_id: str, acknowledged: bool = False) -> Optional[dict]:
     with get_db_session() as db:
         r = _scoped(db.query(BridgingRitual).filter(BridgingRitual.id == ritual_id),

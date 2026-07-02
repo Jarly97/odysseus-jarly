@@ -35287,6 +35287,299 @@ input.cp-swatch-input::selection { background: transparent; }
   border-color: #111;
 }
 
+/* ── Clients (CM engagement workspace) ─────────────────────────────────── */
+
+.clients-pane-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.clients-pane-backdrop .clients-pane { pointer-events: auto; }
+
+.clients-pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  width: min(1020px, 94vw);
+  height: min(84vh, 880px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -0.015em;
+  animation: notes-pane-enter 200ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+.clients-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.clients-pane-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--red);
+  display: flex;
+  align-items: center;
+}
+
+.clients-pane-body {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 12px 14px 20px;
+}
+
+.clients-dim { color: color-mix(in srgb, var(--fg) 55%, transparent); font-size: 0.85em; }
+
+.clients-section-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--fg) 60%, transparent);
+  margin: 18px 0 8px;
+}
+.clients-section-label:first-child { margin-top: 4px; }
+
+/* Summary bar */
+.clients-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 6px;
+}
+.clients-sum-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 11px;
+}
+.clients-sum-chip b { font-size: 12px; }
+
+/* Stage chips — semantic states from existing tokens only */
+.clients-stage-chip {
+  display: inline-block;
+  padding: 1px 8px 2px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--border);
+  text-transform: lowercase;
+}
+.clients-stage-stuck   { color: var(--red);   border-color: var(--red);   background: color-mix(in srgb, var(--red) 12%, transparent); }
+.clients-stage-moving  { color: var(--warn);  border-color: var(--warn);  background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.clients-stage-landing { color: var(--color-accent); border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.clients-stage-landed  { color: var(--green); border-color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.clients-stage-unknown { color: color-mix(in srgb, var(--fg) 50%, transparent); }
+
+.clients-loss-flag {
+  display: inline-block;
+  padding: 0 6px 1px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--warn);
+  border: 1px solid var(--warn);
+}
+
+/* Triage table (scoreboard-table recipe) */
+.clients-triage { overflow-x: auto; }
+.clients-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.clients-table th {
+  text-align: left;
+  text-transform: uppercase;
+  font-size: 0.72em;
+  font-weight: 600;
+  padding: 5px 10px;
+  color: color-mix(in srgb, var(--fg) 55%, transparent);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.clients-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+}
+.clients-row { cursor: pointer; }
+.clients-row:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+
+/* Cards (doclib-card recipe) */
+.clients-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.clients-card {
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.clients-client-card, .clients-sk-card { cursor: pointer; }
+.clients-client-card:hover, .clients-sk-card:hover {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  border-color: color-mix(in srgb, var(--fg) 16%, transparent);
+}
+.clients-card-title { font-size: 13px; font-weight: 600; }
+.clients-card-sub { font-size: 11px; color: color-mix(in srgb, var(--fg) 55%, transparent); margin-top: 2px; }
+.clients-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+.clients-policy-chip {
+  display: inline-block;
+  padding: 1px 8px 2px;
+  border-radius: 10px;
+  font-size: 10px;
+  border: 1px dashed var(--border);
+  color: color-mix(in srgb, var(--fg) 60%, transparent);
+}
+
+/* Detail heads */
+.clients-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  margin-bottom: 6px;
+}
+.clients-detail-title { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; }
+
+/* Forms */
+.clients-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.clients-form-row { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.clients-form-row > input, .clients-form-row > select { flex: 1; min-width: 140px; }
+.clients-form-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+.clients-field-label { font-size: 11px; font-weight: 600; margin-top: 2px; }
+.clients-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+.clients-textarea:focus { outline: none; border-color: var(--red); }
+.clients-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Transcripts */
+.clients-tr-list { display: flex; flex-direction: column; gap: 8px; }
+.clients-tr-row { display: flex; align-items: center; gap: 8px; }
+.clients-tr-main { flex: 1; min-width: 0; }
+.clients-artifact-select { max-width: 220px; }
+
+/* Rituals */
+.clients-ritual-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
+  font-size: 12px;
+}
+.clients-ritual-row:last-child { border-bottom: none; }
+.clients-ritual-name { flex: 1; }
+.clients-ritual-done { text-decoration: line-through; opacity: 0.6; }
+.clients-ritual-status { display: flex; align-items: center; }
+
+/* Comms frames */
+.clients-frames-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.clients-frame-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+
+/* Synthesized artifact */
+.clients-artifact-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.55;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 8px 0 0;
+}
+
+/* Empty state */
+.clients-empty {
+  text-align: center;
+  padding: 28px 16px;
+  font-size: 13px;
+  opacity: 0.55;
+  font-style: italic;
+  grid-column: 1 / -1;
+}
+
+/* Fullscreen (via windowDrag fsClass) */
+.clients-window-fullscreen { border-radius: 0; }
+
+/* Mobile bottom-sheet takeover */
+@media (max-width: 768px) {
+  body.clients-view .clients-pane {
+    position: fixed;
+    inset: 0;
+    max-width: 100%;
+    width: 100% !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    z-index: 170;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+    overflow: hidden;
+    animation: sheet-enter 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    transform-origin: bottom center;
+  }
+  .clients-form-row > input, .clients-form-row > select { min-width: 100%; }
+  .clients-tr-row { flex-wrap: wrap; }
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
    Frosted glass theme — applied when the user enables the "Glass" toggle
    in theme settings (writes `body.theme-frosted`). Layers a semi-translucent
@@ -35294,6 +35587,7 @@ input.cp-swatch-input::selection { background: transparent; }
    behind it, so the UI reads like layered glass.
    ───────────────────────────────────────────────────────────────────────── */
 body.theme-frosted #sidebar,
+body.theme-frosted .clients-pane,
 body.theme-frosted .modal-content,
 body.theme-frosted .doclib-modal-content,
 body.theme-frosted .gallery-modal-content,
@@ -35380,6 +35674,7 @@ body.theme-frosted #theme-popup .admin-card {
 body.theme-frosted .modal-content,
 body.theme-frosted .doclib-modal-content,
 body.theme-frosted .gallery-modal-content,
+body.theme-frosted .clients-pane,
 body.theme-frosted .notes-pane,
 body.theme-frosted .research-pane,
 body.theme-frosted .calendar-pane,

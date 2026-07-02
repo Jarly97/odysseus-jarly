@@ -754,6 +754,11 @@ async def serve_memory(request: Request):
 async def serve_gallery(request: Request):
     return await serve_index(request)
 
+@app.get("/clients")
+async def serve_clients(request: Request):
+    return await serve_index(request)
+
+
 @app.get("/tasks")
 async def serve_tasks(request: Request):
     return await serve_index(request)

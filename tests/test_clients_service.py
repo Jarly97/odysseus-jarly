@@ -83,8 +83,12 @@ def test_rituals():
     s = svc.add_stakeholder("karl", c["id"], "Amy Shah")
     r = svc.add_ritual("karl", s["id"], "first artefact in her voice")
     assert r["acknowledged"] is False and r["completed_at"] is None
+    # listing is owner-scoped and returns the ritual
+    assert [x["id"] for x in svc.list_rituals("karl", s["id"])] == [r["id"]]
+    assert svc.list_rituals("cto", s["id"]) is None
     done = svc.complete_ritual("karl", r["id"], acknowledged=True)
     assert done["acknowledged"] is True and done["completed_at"] is not None
+    assert svc.list_rituals("karl", s["id"])[0]["acknowledged"] is True
     assert svc.complete_ritual("cto", r["id"]) is None
 
 
