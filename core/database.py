@@ -26,6 +26,16 @@ class TimestampMixin:
 # Get database URL from environment, default to SQLite
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/app.db")
 
+# sqlite3 cannot create missing parent directories, and this module connects
+# at import time (init_db() runs at the bottom of the file). On a fresh
+# checkout — CI, or a first run before setup.py — data/ does not exist yet,
+# so the import dies with "unable to open database file". Create the parent
+# directory up front. Skipped for :memory: (no dirname) and non-SQLite URLs.
+if DATABASE_URL.startswith("sqlite:///"):
+    _db_dir = os.path.dirname(DATABASE_URL.replace("sqlite:///", "", 1))
+    if _db_dir:
+        os.makedirs(_db_dir, exist_ok=True)
+
 # Create engine
 engine = create_engine(
     DATABASE_URL,
