@@ -26,6 +26,13 @@ class TimestampMixin:
 # Get database URL from environment, default to SQLite
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/app.db")
 
+# SQLite cannot create its file in a directory that doesn't exist yet (fresh
+# checkouts have no ./data until Docker or a first run creates it).
+if DATABASE_URL.startswith("sqlite:///"):
+    _db_dir = os.path.dirname(DATABASE_URL.replace("sqlite:///", ""))
+    if _db_dir:
+        os.makedirs(_db_dir, exist_ok=True)
+
 # Create engine
 engine = create_engine(
     DATABASE_URL,
